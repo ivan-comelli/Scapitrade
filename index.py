@@ -7,12 +7,12 @@ import statsmodels.api as sm
 from statsmodels.tsa.seasonal import STL
 from custom_ta.smi import SMI
 import pandas as pd
-from custom_ta.atr import ATR
 from strategy import MiEstrategia
 from plots import Graph
 from dotenv import load_dotenv
 import os
-
+import warnings
+warnings.filterwarnings("ignore")
 load_dotenv()
 TICKET = os.getenv("TICKET")
 API_KEY = os.getenv("API_KEY")
@@ -78,16 +78,12 @@ def calculate_ta(lamb=3, k=5, d=3, ma=2, seasonal=20):
     stl = STL(close, period=seasonal).fit()
     seasonal =  sm.tsa.filters.hpfilter(stl.seasonal, lamb=ma)[-1]
     seasonal_ma = talib.EMA(seasonal, ma)
-    [lower_atr, high_atr] = ATR(high, low, close, multiplicador=1.5)
-
     price_hp = pd.Series(price_hp, index=data.index)
     smi = pd.Series(smi, index=data.index)
     smi_ma = pd.Series(smi_ma, index=data.index)
     seasonal = pd.Series(seasonal, index=data.index)
     seasonal_ma = pd.Series(seasonal_ma, index=data.index)
-    lower_atr = pd.Series(lower_atr, index=data.index)
-    high_atr = pd.Series(high_atr, index=data.index)
-    return [price_hp, smi, smi_ma, stl, seasonal, seasonal_ma, lower_atr, high_atr]
+    return [price_hp, smi, smi_ma, stl, seasonal, seasonal_ma]
 
 def abrir_orden(symbol, side, quantity):
     try:
@@ -110,14 +106,19 @@ def update_kline_graph(n):
     if all_kline_data.empty or real_time_kline_data.empty or (all_kline_data.iloc[-1] == real_time_kline_data.iloc[-1]).all():
         return graph.layout   
     all_kline_data.loc[real_time_kline_data.index[-1]] = real_time_kline_data.iloc[-1]
-    [price_hp, smi, smi_ma, stl, seasonal, seasonal_ma, lower_atr, high_atr] = calculate_ta()
-    strategy.update_ta_data(all_kline_data, smi, smi_ma, seasonal, seasonal_ma, lower_atr, high_atr)
-    strategy.detectar_cruces()
-    graph.update_ta_data(all_kline_data, price_hp, smi, smi_ma, stl, seasonal, seasonal_ma, lower_atr, high_atr)
-    graph.update_strategy_data(strategy.ci_smi, strategy.co_smi, strategy.ci_cycle, strategy.co_cycle, strategy.orders)
+    [price_hp, smi, smi_ma, stl, seasonal, seasonal_ma] = calculate_ta()
+    strategy.update_ta_data(all_kline_data, smi, smi_ma, seasonal, seasonal_ma)
+    print("update_ta_data")
+    strategy.simular_estrategia()
+    print("simular")
+    graph.update_ta_data(all_kline_data, price_hp, smi, smi_ma, stl, seasonal, seasonal_ma, strategy.risk)
+    print("update_ta_data")
+    #graph.update_strategy_data(strategy.ci_smi, strategy.co_smi, strategy.ci_cycle, strategy.co_cycle, strategy.orders, strategy.risk)
+    print("update_strategy_data")
     graph.update_ta_plots()
-    graph.update_strategy_plots()
-
+    print("update_ta_plots")
+    #graph.update_strategy_plots()
+    print("fin")
     return graph.layout
 
 def start_service():
@@ -139,7 +140,7 @@ if __name__ == '__main__':
         app.layout = html.Div([
             html.H1("Tiempo Real"),
             dcc.Graph(id='kline-graph'),
-            dcc.Interval(id='interval-component', interval=15000),  # Actualizar cada 5 segundos
+            dcc.Interval(id='interval-component', interval=1000),  # Actualizar cada 5 segundos
         ])
         app.run_server(debug=DEBUG)
     else:

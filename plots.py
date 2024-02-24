@@ -7,8 +7,7 @@ COLOR_TREND = 'green'
 KLINE = 'Velas'
 FILTER = 'Hodrick Prescott'
 TREND = 'Tendencia'
-LOW = 'Bajo'
-HIGH = 'Alto'
+STOP = 'STOP'
 SMI = 'SMI'
 MA_SMI = 'Media SMI'
 CYCLER = 'Ciclos'
@@ -33,7 +32,7 @@ class Graph:
     def __init__(self):
         self.layout = make_subplots(rows=4, cols=1, shared_xaxes=True, vertical_spacing=0.01, row_heights=[0.4, 0.2, 0.2, 0.2])
 
-    def update_ta_data(self, all_kline_data, price_hp, smi, smi_ma, stl, seasonal, seasonal_ma, lower_atr, high_atr):
+    def update_ta_data(self, all_kline_data, price_hp, smi, smi_ma, stl, seasonal, seasonal_ma, stop):
         self.all_kline_data = all_kline_data
         self.price_hp = price_hp
         self.smi = smi
@@ -41,15 +40,15 @@ class Graph:
         self.stl = stl
         self.seasonal = seasonal
         self.seasonal_ma = seasonal_ma
-        self.lower_atr = lower_atr
-        self.high_atr = high_atr
+        self.stop = stop
 
-    def update_strategy_data(self, ci_smi, co_smi, ci_cycle, co_cycle, orders):
+    def update_strategy_data(self, ci_smi, co_smi, ci_cycle, co_cycle, orders, stops):
         self.ci_smi = ci_smi
         self.co_smi = co_smi
         self.ci_cycle = ci_cycle
         self.co_cycle = co_cycle
         self.orders = orders
+        self.stops = stops
         
     def init_ta_plots(self, TICKET):
         self.layout.update_layout(
@@ -69,20 +68,6 @@ class Graph:
             mode='lines',
             name=FILTER,
             line=dict(color=COLOR_FILTER),
-            row=1,
-            col=1
-        )
-        self.layout.add_scatter(
-            mode='lines',
-            name=LOW,
-            line=dict(color=COLOR_OSCILATOR),
-            row=1,
-            col=1
-        )
-        self.layout.add_scatter(
-            mode='lines',
-            name=HIGH,
-            line=dict(color=COLOR_MA),
             row=1,
             col=1
         )
@@ -123,6 +108,13 @@ class Graph:
         )
         
     def init_strategy_plots(self):
+        self.layout.add_scatter(
+            mode='lines',
+            name=STOP,
+            line=dict(color=COLOR_OSCILATOR),
+            row=1,
+            col=1
+        )
         self.layout.add_scatter(
             mode='markers', 
             marker=MARKER_BEAR,
@@ -171,16 +163,6 @@ class Graph:
         )
         self.layout.update_traces(
             x=index,
-            y=self.lower_atr,
-            selector=dict(name=LOW) 
-        )
-        self.layout.update_traces(
-            x=index,
-            y=self.high_atr,
-            selector=dict(name=HIGH) 
-        )
-        self.layout.update_traces(
-            x=index,
             y=self.price_hp,
             selector=dict(name=FILTER) 
         )
@@ -210,6 +192,11 @@ class Graph:
             selector=dict(name=TREND) 
         )
     def update_strategy_plots(self):
+        self.layout.update_traces(
+            x=self.stops.index,
+            y=self.stops.value,
+            selector=dict(name=STOP) 
+        )
         self.layout.update_traces(
             x=self.ci_smi,
             y=self.smi[self.ci_smi],
