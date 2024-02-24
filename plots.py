@@ -1,5 +1,5 @@
 from plotly.subplots import make_subplots
-
+import pandas as pd
 COLOR_MA = 'red'
 COLOR_OSCILATOR = 'blue'
 COLOR_FILTER = 'yellow'
@@ -31,8 +31,12 @@ MARKER_BULL = dict(
 class Graph:
     def __init__(self):
         self.layout = make_subplots(rows=4, cols=1, shared_xaxes=True, vertical_spacing=0.01, row_heights=[0.4, 0.2, 0.2, 0.2])
+        self.ci_smi = pd.Series()
+        self.co_smi = pd.Series()
+        self.ci_cycle = pd.Series()
+        self.co_cycle = pd.Series()
 
-    def update_ta_data(self, all_kline_data, price_hp, smi, smi_ma, stl, seasonal, seasonal_ma, stop):
+    def update_ta_data(self, all_kline_data, price_hp, smi, smi_ma, stl, seasonal, seasonal_ma):
         self.all_kline_data = all_kline_data
         self.price_hp = price_hp
         self.smi = smi
@@ -40,13 +44,18 @@ class Graph:
         self.stl = stl
         self.seasonal = seasonal
         self.seasonal_ma = seasonal_ma
-        self.stop = stop
 
-    def update_strategy_data(self, ci_smi, co_smi, ci_cycle, co_cycle, orders, stops):
-        self.ci_smi = ci_smi
-        self.co_smi = co_smi
-        self.ci_cycle = ci_cycle
-        self.co_cycle = co_cycle
+    def update_strategy_data(self, csmi, ccycle, orders, stops):
+        for count in range(len(csmi)):
+            idx = csmi.index[count]
+            if csmi[idx]:
+                self.co_smi[idx] = csmi[idx]
+            elif csmi[idx] != None:
+                self.ci_smi[idx] = csmi[idx]
+            if ccycle[idx]:
+                self.co_cycle[idx] = ccycle[idx]
+            elif ccycle[idx] != None:
+                self.ci_cycle[idx] = ccycle[idx]
         self.orders = orders
         self.stops = stops
         
@@ -194,27 +203,27 @@ class Graph:
     def update_strategy_plots(self):
         self.layout.update_traces(
             x=self.stops.index,
-            y=self.stops.value,
+            y=self.stops,
             selector=dict(name=STOP) 
         )
         self.layout.update_traces(
-            x=self.ci_smi,
-            y=self.smi[self.ci_smi],
+            x=self.ci_smi.index,
+            y=self.smi[self.ci_smi.index],
             selector=dict(name=ALERT_BEAR_SMI)
         )
         self.layout.update_traces(
-            x=self.co_smi,
-            y=self.smi[self.co_smi],
+            x=self.co_smi.index,
+            y=self.smi[self.co_smi.index],
             selector=dict(name=ALERT_BULL_SMI)
         )
         self.layout.update_traces(
-            x=self.ci_cycle,
-            y=self.seasonal[self.ci_cycle],
+            x=self.ci_cycle.index,
+            y=self.seasonal[self.ci_cycle.index],
             selector=dict(name=ALERT_BEAR_CYCLER)
         )
         self.layout.update_traces(
-            x=self.co_cycle,
-            y=self.seasonal[self.co_cycle],
+            x=self.co_cycle.index,
+            y=self.seasonal[self.co_cycle.index],
             selector=dict(name=ALERT_BULL_CYCLER)
         )
         self.layout.update_traces(

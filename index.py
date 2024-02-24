@@ -108,17 +108,12 @@ def update_kline_graph(n):
     all_kline_data.loc[real_time_kline_data.index[-1]] = real_time_kline_data.iloc[-1]
     [price_hp, smi, smi_ma, stl, seasonal, seasonal_ma] = calculate_ta()
     strategy.update_ta_data(all_kline_data, smi, smi_ma, seasonal, seasonal_ma)
-    print("update_ta_data")
     strategy.simular_estrategia()
-    print("simular")
-    graph.update_ta_data(all_kline_data, price_hp, smi, smi_ma, stl, seasonal, seasonal_ma, strategy.risk)
-    print("update_ta_data")
-    #graph.update_strategy_data(strategy.ci_smi, strategy.co_smi, strategy.ci_cycle, strategy.co_cycle, strategy.orders, strategy.risk)
-    print("update_strategy_data")
+    graph.update_ta_data(all_kline_data, price_hp, smi, smi_ma, stl, seasonal, seasonal_ma)
+    graph.update_strategy_data(strategy.csmi, strategy.ccycle, strategy.orders, strategy.risk)
     graph.update_ta_plots()
-    print("update_ta_plots")
-    #graph.update_strategy_plots()
-    print("fin")
+    graph.update_strategy_plots()
+    print(strategy.calculate_profit())
     return graph.layout
 
 def start_service():

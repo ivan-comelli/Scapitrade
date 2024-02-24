@@ -65,9 +65,8 @@ class MiEstrategia:
         pos = None
         status = None
         choch = None
-        data = []
-        stop_point = len(self.all_kline_data[self.cursor:])
-        start_point = len(self.all_kline_data) - stop_point
+        stop_point = len(self.all_kline_data)
+        start_point = self.all_kline_data.index.get_loc(self.cursor)
         for count in range(start_point, stop_point):
             self.cursor = self.all_kline_data.index[count]
             self.step_stop(choch)
@@ -83,25 +82,24 @@ class MiEstrategia:
                         status = self.setStatus(isBull=False, position = pos)
                     elif not self.crisk[self.cursor] and not choch:
                         status = self.setStatus(isBull=True, position = pos)    
-                if status == None:
-                    item = {
-                        'index': self.cursor,
-                        'close': self.all_kline_data.close.loc[self.cursor],
-                        'status': 0.5
-                    }
+                item = {
+                    'index': self.cursor,
+                    'close': self.all_kline_data.close.loc[self.cursor]
+                }
+                
+                # Añadir el status al diccionario del item
+                if status is None:
+                    item['status'] = 0.5
                 else:
-                    item = {
-                        'index': self.cursor,
-                        'close': self.all_kline_data.close.loc[self.cursor],
-                        'status': int(status)
-                    }
-                data.append(item)
-        
-        if data:
-            print(data)
-            data = pd.DataFrame(data).set_index('index')
-            self.orders = self.orders.append(data)
-
+                    item['status'] = int(status)
+                if item['index'] in self.orders.index:
+                    # Si el índice existe, actualizar los valores correspondientes
+                    self.orders.loc[item['index']] = item
+                else:
+                    # Si el índice no existe, agregar una nueva fila al DataFrame
+                    new_item_df = pd.DataFrame(item, index=[item['index']])
+                    self.orders = pd.concat([self.orders, new_item_df])
+                             
     def setStatus(self, swap = False, isBull = None, position=False):
         if isBull != None:
             if swap:
