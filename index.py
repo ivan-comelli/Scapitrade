@@ -12,6 +12,7 @@ from plots import Graph
 from dotenv import load_dotenv
 import os
 import warnings
+from custom_ta.vsa import vsa_indicator
 warnings.filterwarnings("ignore")
 load_dotenv()
 TICKET = os.getenv("TICKET")
@@ -27,7 +28,8 @@ app = Dash(__name__, suppress_callback_exceptions=True)
 client = Client(API_KEY, API_SECRET)
 strategy = MiEstrategia()
 graph = Graph()
-
+cursor = None
+stop_cursor = None
 def update_all_kline_data(symbol, interval, start_time):
     global all_kline_data
     try:
@@ -67,16 +69,17 @@ def update_real_time_kline_data(msg):
         if len(real_time_kline_data) > 60:
             real_time_kline_data = real_time_kline_data[-60:]
 
-def calculate_ta(lamb=3, k=5, d=3, ma=2, seasonal=20):
+def calculate_ta(lamb=1, k=5, d=3, ma=4, seasonal=20):
     data = all_kline_data
     close = data['close'].values
     high = data['high'].values
     low = data['low'].values
     volume = data['volume'].values
     price_hp = sm.tsa.filters.hpfilter(close, lamb=lamb)[-1]
+    #price_hp = talib.EMA(close, 14)
     [smi, smi_ma] = SMI(price_hp, k, d, ma)
     stl = STL(close, period=seasonal).fit()
-    seasonal =  sm.tsa.filters.hpfilter(stl.seasonal, lamb=ma)[-1]
+    seasonal =  talib.RSI(stl.trend, ma)
     seasonal_ma = talib.EMA(seasonal, ma)
     price_hp = pd.Series(price_hp, index=data.index)
     smi = pd.Series(smi, index=data.index)
@@ -101,10 +104,10 @@ def abrir_orden(symbol, side, quantity):
     Output('kline-graph', 'figure'),
     Input('interval-component', 'n_intervals')
 )    
-def update_kline_graph(n):
+def sync_data(n):
     global all_kline_data, real_time_kline_data
     if all_kline_data.empty or real_time_kline_data.empty or (all_kline_data.iloc[-1] == real_time_kline_data.iloc[-1]).all():
-        return graph.layout   
+        return graph.layout
     all_kline_data.loc[real_time_kline_data.index[-1]] = real_time_kline_data.iloc[-1]
     [price_hp, smi, smi_ma, stl, seasonal, seasonal_ma] = calculate_ta()
     strategy.update_ta_data(all_kline_data, smi, smi_ma, seasonal, seasonal_ma)
@@ -113,7 +116,6 @@ def update_kline_graph(n):
     graph.update_strategy_data(strategy.csmi, strategy.ccycle, strategy.orders, strategy.risk)
     graph.update_ta_plots()
     graph.update_strategy_plots()
-    print(strategy.calculate_profit())
     return graph.layout
 
 def start_service():
@@ -126,7 +128,7 @@ def start_service():
 
 if __name__ == '__main__':
     #esto falla por culpla de la zona horaria -arreglar 
-    start_time = (datetime.now() - timedelta(minutes= 10)).strftime("%d %b %Y %H:%M:%S")
+    start_time = (datetime.now() - timedelta(minutes= 60)).strftime("%d %b %Y %H:%M:%S")
     update_all_kline_data(TICKET, Client.KLINE_INTERVAL_1MINUTE, start_time)
     if all_kline_data is not None:  # Verifica si se obtuvieron los datos correctamente
         graph.init_ta_plots(TICKET=TICKET)

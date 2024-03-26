@@ -1,5 +1,6 @@
 from plotly.subplots import make_subplots
 import pandas as pd
+import talib
 COLOR_MA = 'red'
 COLOR_OSCILATOR = 'blue'
 COLOR_FILTER = 'yellow'
@@ -203,7 +204,7 @@ class Graph:
     def update_strategy_plots(self):
         self.layout.update_traces(
             x=self.stops.index,
-            y=self.stops,
+            y=talib.EMA(self.stops, 4),
             selector=dict(name=STOP) 
         )
         self.layout.update_traces(

@@ -12,7 +12,7 @@ import talib
 #EL ATR deberia provenir de afuera y el calculo de trailing stop de aca
 utc3 = pytz.timezone('America/Buenos_Aires')
 class MiEstrategia:
-    def __init__(self, atr_period = 14, multiplier = 1.5, start_cursor = 16):
+    def __init__(self, atr_period = 4, multiplier = 0.3, start_cursor = 16):
         self.cursor = None
         self.csmi = pd.Series()
         self.ccycle = pd.Series()
@@ -23,6 +23,9 @@ class MiEstrategia:
         self.atr_period = atr_period
         self.multiplier = multiplier
         self.start_cursor = start_cursor
+        self.status = None
+        self.choch = None
+        self.lastProfit = None
 
     def set_broker_action(self, short, long):
         self.go_to_short = short
@@ -38,7 +41,7 @@ class MiEstrategia:
             self.cursor = self.all_kline_data.index[self.start_cursor]
                         
     def detectar_cruces(self):        
-        before_cursor = self.all_kline_data.loc[:self.cursor].index[-2]
+        before_cursor = self.all_kline_data.loc[:self.cursor].index[-3]
         scclose = self.all_kline_data.close.loc[before_cursor:self.cursor]
         scsmi = self.smi.loc[before_cursor:self.cursor]
         scsmi_ma = self.smi_ma.loc[before_cursor:self.cursor]
@@ -62,36 +65,34 @@ class MiEstrategia:
             self.crisk[self.cursor] = False
 
     def simular_estrategia(self):
-        pos = None
-        status = None
-        choch = None
-        stop_point = len(self.all_kline_data)
-        start_point = self.all_kline_data.index.get_loc(self.cursor)
+        #podemos medir una vela atrasada para evitar falsas señales
+        stop_point = len(self.all_kline_data)-1
+        start_point = self.all_kline_data.index.get_loc(self.cursor)+1
         for count in range(start_point, stop_point):
             self.cursor = self.all_kline_data.index[count]
-            self.step_stop(choch)
+            self.step_stop()
             if count > self.start_cursor+1:
                 self.detectar_cruces()
                 if self.csmi[self.cursor] is not None:
-                    status = self.setStatus(swap=True, isBull=self.csmi[self.cursor], position = pos)
-                    choch = self.csmi[self.cursor]
-                elif self.ccycle[self.cursor] is not None:
-                    status = self.setStatus(isBull=self.ccycle[self.cursor], position = pos)
+                    self.setStatus(swap=True, isBull=self.csmi[self.cursor])
+                    self.choch = self.csmi[self.cursor]
+                """elif self.ccycle[self.cursor] is not None:
+                    self.setStatus(isBull=self.ccycle[self.cursor])
                 elif self.crisk[self.cursor] is not None:
-                    if self.crisk[self.cursor] and choch:
-                        status = self.setStatus(isBull=False, position = pos)
-                    elif not self.crisk[self.cursor] and not choch:
-                        status = self.setStatus(isBull=True, position = pos)    
+                    if self.crisk[self.cursor] and self.choch:
+                        self.setStatus(isBull=False)
+                    elif not self.crisk[self.cursor] and not self.choch:
+                        self.setStatus(isBull=True)"""  
                 item = {
                     'index': self.cursor,
                     'close': self.all_kline_data.close.loc[self.cursor]
                 }
-                
+                #Falta la condicion de revertir las falsas señales. Aunque nose si es un caso de uso que deberia pasar
                 # Añadir el status al diccionario del item
-                if status is None:
+                if self.status is None:
                     item['status'] = 0.5
                 else:
-                    item['status'] = int(status)
+                    item['status'] = int(self.status)
                 if item['index'] in self.orders.index:
                     # Si el índice existe, actualizar los valores correspondientes
                     self.orders.loc[item['index']] = item
@@ -99,23 +100,27 @@ class MiEstrategia:
                     # Si el índice no existe, agregar una nueva fila al DataFrame
                     new_item_df = pd.DataFrame(item, index=[item['index']])
                     self.orders = pd.concat([self.orders, new_item_df])
-                             
-    def setStatus(self, swap = False, isBull = None, position=False):
+            profit, quantity=self.calculate_profit()
+            if profit != self.lastProfit:
+                self.lastProfit = profit
+                print(self.cursor, " | Ganancias: ", profit, " x ", quantity, " Total: ", profit-(quantity * 0.05 * 2))
+            
+            
+                            
+    def setStatus(self, swap = False, isBull = None):
         if isBull != None:
             if swap:
-                if position:
+                if self.status:
                     self.call_to_action(pos = isBull)
-                position = self.call_to_action(pos = isBull)
+                self.status = self.call_to_action(pos = isBull)
             else:
-                if position:
-                    if position != isBull:
-                        self.call_to_action(pos = isBull)
-                        position = None
-                else:
-                    position = self.call_to_action(pos = isBull)    
-        return position          
+                if self.status != None and self.status != isBull:
+                    self.call_to_action(pos = isBull)
+                    self.status = None
+                elif self.choch == isBull:
+                    self.status = self.call_to_action(pos = isBull)    
 
-    def step_stop(self, choch):
+    def step_stop(self):
         idx = self.all_kline_data.index.get_loc(self.cursor)
         close = self.all_kline_data.close.iloc[idx - self.atr_period: idx].values
         high = self.all_kline_data.high.iloc[idx - self.atr_period: idx].values
@@ -123,9 +128,9 @@ class MiEstrategia:
         self.atr[self.cursor] = talib.ATR(high, low, close, self.atr_period-1)[-1]
         atr_idx = self.atr.index.get_loc(self.cursor)
         src = self.all_kline_data.open.iloc[idx]
-        if choch and atr_idx > 0:
+        if self.choch and atr_idx > 0:
             self.risk[self.cursor] = src - (self.atr[atr_idx - 1] * self.multiplier)
-        elif not choch and atr_idx > 0:
+        elif not self.choch and atr_idx > 0:
             self.risk[self.cursor] = src + (self.atr[atr_idx - 1] * self.multiplier)
         else:
             self.risk[self.cursor] = src
@@ -134,8 +139,10 @@ class MiEstrategia:
         isSync = self.isSync()
         if isSync:
             if pos == True:
+                print("LONG")
                 self.go_to_long()
             elif pos == False:
+                print("SHORT")
                 self.go_to_short()
         return pos
 
@@ -147,15 +154,16 @@ class MiEstrategia:
         return False
     
     def calculate_profit(self):
-        #Ya tiene incorporado el choch en el df solo hay que comparar si cambia con el anterior
         resultado = 0
         acum = 0
         last_price = 0
         last_status = None
         change = -1
+        quantity= 0
         for data in range(len(self.orders)):
             item = self.orders.iloc[data]
             if change != item.status:
+                quantity = quantity + 1
                 if last_status == 1:
                     acum += (item.close/last_price - 1)* 100
                 elif last_status == 0:
@@ -166,10 +174,5 @@ class MiEstrategia:
                     acum = 0
                 change = item.status
                 last_price = item.close
-        return resultado
+        return resultado, quantity
 
-    def get_report_backtesting(self):
-        #Este se queda porque deberia de ser varios los test que se pueden mostrar, no es solo profit
-        self.simular_estrategia()
-        result = self.calculate_profit()
-        return result
